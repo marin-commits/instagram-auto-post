@@ -206,6 +206,21 @@ async function main() {
   const imageUrl = await createSignedImageUrl(info.imagePath);
   const caption = captionFor(info);
 
+  if (process.env.DRY_RUN === "true") {
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`Signed image check failed (${imageResponse.status}).`);
+    }
+    const contentType = imageResponse.headers.get("content-type") || "";
+    if (!contentType.startsWith("image/")) {
+      throw new Error(`Expected an image but received: ${contentType || "unknown"}`);
+    }
+    const account = await graphGet(INSTAGRAM_USER_ID, { fields: "id,username" });
+    console.log(`Dry run successful for @${account.username || "unknown"}.`);
+    console.log(`Caption preview:\n${caption}`);
+    return;
+  }
+
   const container = await graphPost(`${INSTAGRAM_USER_ID}/media`, {
     image_url: imageUrl,
     caption,
