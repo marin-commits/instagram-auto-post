@@ -69,22 +69,89 @@ function dateInfo(date) {
 }
 
 const weekdayLines = {
-  0: "여유로운 일요일☀️ 행운 충전 완료!",
-  1: "월요일 운세 배달 완료💌",
-  2: "행운이 찾아오는 화요일🍀",
-  3: "거의 다 왔어요🏃 오늘도 화이팅💪",
-  4: "조금만 더 힘내요✨ 행운 가득한 목요일!",
-  5: "기다리던 금요일 도착🎉 좋은 일만 가득하길!",
-  6: "신나는 토요일🌈 행운도 함께 출발!",
+  0: [
+    "여유로운 일요일☀️ 행운 충전 완료!",
+    "일요일엔 마음도 운세도 말랑하게🫧",
+    "느긋한 일요일🌈 오늘의 행운을 만나봐!",
+  ],
+  1: [
+    "월요일 운세 배달 완료💌",
+    "새로운 한 주 시작✨ 월요일 행운도 도착!",
+    "월요일도 걱정 말아요🍀 행운이 함께할 거야!",
+  ],
+  2: [
+    "행운이 찾아오는 화요일🍀",
+    "화요일의 좋은 기운, 놓치지 말기✨",
+    "기분 좋은 화요일🌿 오늘의 행운도 챙겨가자!",
+  ],
+  3: [
+    "거의 다 왔어요🏃 오늘도 화이팅💪",
+    "수요일 고비도 행운과 함께 가볍게💫",
+    "벌써 수요일! 오늘의 행운으로 힘내보자🍀",
+  ],
+  4: [
+    "조금만 더 힘내요✨ 행운 가득한 목요일!",
+    "목요일엔 좋은 일이 슬쩍 찾아올지도🍀",
+    "주말이 가까워지는 목요일🌈 행운도 가까이!",
+  ],
+  5: [
+    "기다리던 금요일 도착🎉 좋은 일만 가득하길!",
+    "금요일엔 기분 좋은 행운까지 덤으로🎁",
+    "드디어 금요일✨ 오늘의 행운도 신나게 출발!",
+  ],
+  6: [
+    "신나는 토요일🌈 행운도 함께 출발!",
+    "토요일의 여유와 행운, 둘 다 챙겨가자🍀",
+    "기분 좋은 토요일☀️ 오늘은 행운 가득!",
+  ],
 };
 
-function captionFor({ month, weekday }) {
+const seasonalLines = {
+  spring: [
+    "봄바람처럼 기분 좋은 행운이 살랑🌸",
+    "몽글몽글 피어나는 봄 행운도 챙겨봐🌷",
+    "따스한 봄기운 따라 좋은 일도 성큼🌿",
+  ],
+  summer: [
+    "더위는 잠시 내려놓고 시원한 행운 챙겨가자🌊",
+    "뜨거운 햇살만큼 반짝이는 행운이 올 거야☀️",
+    "여름날의 기분 좋은 행운 한 조각🍉",
+  ],
+  autumn: [
+    "선선한 바람 따라 행운도 살랑🍂",
+    "가을빛처럼 포근한 행운이 찾아올 거야🌰",
+    "오늘은 좋은 기운이 차곡차곡 쌓이는 날🍁",
+  ],
+  winter: [
+    "추위는 잠시 잊고 포근한 행운으로 채워봐❄️",
+    "겨울바람 사이로 따뜻한 행운이 쏙🧣",
+    "오늘은 마음까지 따뜻해지는 행운 한 조각☃️",
+  ],
+};
+
+function seasonFor(month) {
+  if ([3, 4, 5].includes(month)) return "spring";
+  if ([6, 7, 8].includes(month)) return "summer";
+  if ([9, 10, 11].includes(month)) return "autumn";
+  return "winter";
+}
+
+function openingFor({ year, month, day, weekday }) {
+  const dateSeed = year * 10000 + month * 100 + day;
+  const weekdayOptions = weekdayLines[weekday];
+  const seasonOptions = seasonalLines[seasonFor(month)];
+  const weekdayLine = weekdayOptions[dateSeed % weekdayOptions.length];
+  const seasonalLine = seasonOptions[(dateSeed + weekday) % seasonOptions.length];
+  return `${weekdayLine}\n${seasonalLine}`;
+}
+
+function captionFor({ year, month, day, weekday }) {
   const hashtags =
     SLOT === "A"
       ? "#포스텔러 #오늘의운세 #띠별운세 #띠별오늘의운세 #사주"
       : "#포스텔러 #오늘의운세 #별자리운세 #별자리 #운세";
 
-  return `${weekdayLines[weekday]}
+  return `${openingFor({ year, month, day, weekday })}
 
 포스텔러 오늘의 운세 보고🍀 행운 한 스푼 챙겨가자!✨
 
