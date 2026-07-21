@@ -10,7 +10,7 @@ for (const name of REQUIRED_ENV) {
 }
 
 const {
-  INSTAGRAM_ACCESS_TOKEN,
+  INSTAGRAM_ACCESS_TOKEN: INITIAL_INSTAGRAM_ACCESS_TOKEN,
   SUPABASE_URL,
   SUPABASE_SECRET_KEY,
   SUPABASE_BUCKET,
@@ -19,6 +19,9 @@ const {
 const SLOT = (process.env.SLOT || "").toUpperCase();
 const TARGET_DATE = process.env.TARGET_DATE || "";
 const META_API_VERSION = process.env.META_API_VERSION || "v23.0";
+const TOKEN_STATE_PATH = "_config/instagram-token.json";
+const TOKEN_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+let instagramAccessToken = INITIAL_INSTAGRAM_ACCESS_TOKEN;
 
 if (!["A", "B"].includes(SLOT)) {
   throw new Error("SLOT must be A or B.");
@@ -120,6 +123,70 @@ function supabaseHeaders(contentType) {
   };
 }
 
+async function readPrivateJson(path) {
+  const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_BUCKET)}/${encodePath(path)}`;
+  const response = await fetch(url, { headers: supabaseHeaders() });
+  if (response.status === 404 || response.status === 400) return null;
+  return responseJson(response, `Read private state ${path}`);
+}
+
+async function writePrivateJson(path, payload, upsert = true) {
+  const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_BUCKET)}/${encodePath(path)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders("application/json"),
+      "x-upsert": String(upsert),
+    },
+    body: JSON.stringify(payload, null, 2),
+  });
+  return responseJson(response, `Write private state ${path}`);
+}
+
+async function prepareInstagramToken() {
+  const stored = await readPrivateJson(TOKEN_STATE_PATH);
+  if (stored?.accessToken) {
+    instagramAccessToken = stored.accessToken;
+  }
+
+  const refreshedAt = stored?.refreshedAt ? Date.parse(stored.refreshedAt) : 0;
+  const refreshDue =
+    !Number.isFinite(refreshedAt) ||
+    refreshedAt === 0 ||
+    Date.now() - refreshedAt >= TOKEN_REFRESH_INTERVAL_MS;
+
+  if (!refreshDue) {
+    console.log("Instagram token refresh is not due yet.");
+    return;
+  }
+
+  try {
+    const query = new URLSearchParams({
+      grant_type: "ig_refresh_token",
+      access_token: instagramAccessToken,
+    });
+    const response = await fetch(
+      `https://graph.instagram.com/refresh_access_token?${query}`
+    );
+    const data = await responseJson(response, "Refresh Instagram access token");
+    if (!data.access_token) {
+      throw new Error("Refresh response did not include access_token.");
+    }
+
+    instagramAccessToken = data.access_token;
+    await writePrivateJson(TOKEN_STATE_PATH, {
+      accessToken: data.access_token,
+      refreshedAt: new Date().toISOString(),
+      expiresIn: data.expires_in || null,
+    });
+    console.log("Instagram access token refreshed and stored securely.");
+  } catch (error) {
+    console.warn(
+      `Instagram token refresh was skipped; the current token will be used: ${error.message}`
+    );
+  }
+}
+
 async function alreadyPublished(statePath) {
   const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_BUCKET)}/${encodePath(statePath)}`;
   const response = await fetch(url, { headers: supabaseHeaders() });
@@ -146,7 +213,7 @@ async function createSignedImageUrl(imagePath) {
 async function graphPost(path, values) {
   const body = new URLSearchParams({
     ...values,
-    access_token: INSTAGRAM_ACCESS_TOKEN,
+    access_token: instagramAccessToken,
   });
   const response = await fetch(
     `https://graph.instagram.com/${META_API_VERSION}/${path}`,
@@ -158,7 +225,7 @@ async function graphPost(path, values) {
 async function graphGet(path, values) {
   const query = new URLSearchParams({
     ...values,
-    access_token: INSTAGRAM_ACCESS_TOKEN,
+    access_token: instagramAccessToken,
   });
   const response = await fetch(
     `https://graph.instagram.com/${META_API_VERSION}/${path}?${query}`
@@ -192,6 +259,8 @@ async function savePublishedState(statePath, payload) {
 }
 
 async function main() {
+  await prepareInstagramToken();
+
   const info = dateInfo(targetDate());
   const statePath = `_published/${info.iso}-${SLOT}.json`;
 
