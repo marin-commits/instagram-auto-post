@@ -29,6 +29,12 @@ Repository Settings → Secrets and variables → Actions에 등록합니다.
 - `SUPABASE_SECRET_KEY`
 - `SUPABASE_BUCKET` (현재 값: `insta-images`)
 
+## Instagram 토큰 자동 갱신
+
+최초 토큰은 `INSTAGRAM_ACCESS_TOKEN` Secret에서 읽습니다. 이후 7일마다 Meta 갱신 API를 호출하고, 갱신된 토큰을 비공개 Supabase 경로 `_config/instagram-token.json`에 저장합니다. 게시 작업은 이 최신 토큰을 우선 사용합니다.
+
+계정 비밀번호 변경, 앱 권한 해제 또는 Meta의 강제 무효화가 발생한 경우에는 새 토큰을 발급해 GitHub Secret을 갱신하고 Supabase의 `_config/instagram-token.json`을 삭제해야 합니다.
+
 ## 수동 테스트
 
 Actions → Instagram Auto Post → Run workflow에서 게시 종류와 대상 날짜를 선택합니다.
