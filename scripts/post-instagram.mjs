@@ -153,8 +153,6 @@ function captionFor({ year, month, day, weekday }) {
 
   return `${openingFor({ year, month, day, weekday })}
 
-포스텔러 오늘의 운세 보고🍀 행운 한 스푼 챙겨가자!✨
-
 하루를 잘 시작할 수 있게 댓글로
 ‘행복해져라!🪄’를 외쳐보세요!
 
