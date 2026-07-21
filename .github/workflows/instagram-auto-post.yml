@@ -1,0 +1,53 @@
+name: Instagram Auto Post
+
+on:
+  schedule:
+    # GitHub Actions cron is UTC. 12:00/12:30 UTC = 21:00/21:30 KST.
+    - cron: "0 12 * * *"
+    - cron: "30 12 * * *"
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "A = 띠별운세, B = 별자리운세"
+        required: true
+        type: choice
+        options:
+          - A
+          - B
+      target_date:
+        description: "운세 대상일 (YYYY-MM-DD). 비워두면 한국시간 기준 다음 날"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instagram-${{ github.event.schedule || inputs.slot }}-${{ inputs.target_date || 'tomorrow' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+      INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+      META_API_VERSION: v23.0
+      TARGET_DATE: ${{ inputs.target_date }}
+      SLOT: ${{ inputs.slot || (github.event.schedule == '0 12 * * *' && 'A' || 'B') }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Publish Instagram feed image
+        run: node scripts/post-instagram.mjs
