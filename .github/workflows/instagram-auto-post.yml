@@ -18,6 +18,11 @@ on:
         description: "운세 대상일 (YYYY-MM-DD). 비워두면 한국시간 기준 다음 날"
         required: false
         type: string
+      dry_run:
+        description: "실제 게시 없이 이미지·계정·캡션만 검사"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -38,6 +43,7 @@ jobs:
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       META_API_VERSION: v23.0
       TARGET_DATE: ${{ inputs.target_date }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
       SLOT: ${{ inputs.slot || (github.event.schedule == '0 12 * * *' && 'A' || 'B') }}
 
     steps:
