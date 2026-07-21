@@ -23,6 +23,11 @@ on:
         required: true
         default: true
         type: boolean
+      test_publish:
+        description: "테스트 게시: 성공 기록을 남기지 않아 정규 예약 때 다시 게시"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -43,6 +48,7 @@ jobs:
       META_API_VERSION: v23.0
       TARGET_DATE: ${{ inputs.target_date }}
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      TEST_PUBLISH: ${{ inputs.test_publish || 'false' }}
       SLOT: ${{ inputs.slot || (github.event.schedule == '0 12 * * *' && 'A' || 'B') }}
 
     steps:
