@@ -264,7 +264,9 @@ async function main() {
   const info = dateInfo(targetDate());
   const statePath = `_published/${info.iso}-${SLOT}.json`;
 
-  if (await alreadyPublished(statePath)) {
+  const testPublish = process.env.TEST_PUBLISH === "true";
+
+  if (!testPublish && await alreadyPublished(statePath)) {
     console.log(`Already published; skipping ${info.iso} ${SLOT}.`);
     return;
   }
@@ -306,13 +308,17 @@ async function main() {
   });
   if (!published.id) throw new Error("Instagram did not return a media ID.");
 
-  await savePublishedState(statePath, {
-    targetDate: info.iso,
-    slot: SLOT,
-    imagePath: info.imagePath,
-    mediaId: published.id,
-    publishedAt: new Date().toISOString(),
-  });
+  if (!testPublish) {
+    await savePublishedState(statePath, {
+      targetDate: info.iso,
+      slot: SLOT,
+      imagePath: info.imagePath,
+      mediaId: published.id,
+      publishedAt: new Date().toISOString(),
+    });
+  } else {
+    console.log("Test publish mode: duplicate-prevention state was not saved.");
+  }
 
   console.log(`Published successfully: ${published.id}`);
 }
