@@ -86,7 +86,7 @@ function captionFor({ month, weekday }) {
 
   return `${weekdayLines[weekday]}
 
-포스텔러 사주 풀이 보시고🍀 명쾌한 해답을 얻어 가세요😆
+포스텔러 오늘의 운세 보고🍀 행운 힌트도 챙겨가세요😆
 
 하루를 잘 시작할 수 있게 댓글로
 ‘행복해져라!🪄’를 외쳐보세요!
