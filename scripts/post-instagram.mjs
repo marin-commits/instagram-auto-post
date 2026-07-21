@@ -1,6 +1,5 @@
 const REQUIRED_ENV = [
   "INSTAGRAM_ACCESS_TOKEN",
-  "INSTAGRAM_USER_ID",
   "SUPABASE_URL",
   "SUPABASE_SECRET_KEY",
   "SUPABASE_BUCKET",
@@ -12,7 +11,6 @@ for (const name of REQUIRED_ENV) {
 
 const {
   INSTAGRAM_ACCESS_TOKEN,
-  INSTAGRAM_USER_ID,
   SUPABASE_URL,
   SUPABASE_SECRET_KEY,
   SUPABASE_BUCKET,
@@ -206,6 +204,12 @@ async function main() {
   const imageUrl = await createSignedImageUrl(info.imagePath);
   const caption = captionFor(info);
 
+  const account = await graphGet("me", { fields: "user_id,username" });
+  const instagramUserId = account.user_id || account.id;
+  if (!instagramUserId) {
+    throw new Error("Instagram /me did not return user_id.");
+  }
+
   if (process.env.DRY_RUN === "true") {
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
@@ -215,13 +219,12 @@ async function main() {
     if (!contentType.startsWith("image/")) {
       throw new Error(`Expected an image but received: ${contentType || "unknown"}`);
     }
-    const account = await graphGet(INSTAGRAM_USER_ID, { fields: "id,username" });
-    console.log(`Dry run successful for @${account.username || "unknown"}.`);
+    console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
     console.log(`Caption preview:\n${caption}`);
     return;
   }
 
-  const container = await graphPost(`${INSTAGRAM_USER_ID}/media`, {
+  const container = await graphPost(`${instagramUserId}/media`, {
     image_url: imageUrl,
     caption,
   });
@@ -229,7 +232,7 @@ async function main() {
 
   await waitForContainer(container.id);
 
-  const published = await graphPost(`${INSTAGRAM_USER_ID}/media_publish`, {
+  const published = await graphPost(`${instagramUserId}/media_publish`, {
     creation_id: container.id,
   });
   if (!published.id) throw new Error("Instagram did not return a media ID.");
