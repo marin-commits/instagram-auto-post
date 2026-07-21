@@ -25,7 +25,6 @@ GitHub Actions cron은 UTC 기준으로 각각 12:00, 12:30에 실행됩니다. 
 Repository Settings → Secrets and variables → Actions에 등록합니다.
 
 - `INSTAGRAM_ACCESS_TOKEN`
-- `INSTAGRAM_USER_ID`
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 - `SUPABASE_BUCKET` (현재 값: `insta-images`)
@@ -34,4 +33,4 @@ Repository Settings → Secrets and variables → Actions에 등록합니다.
 
 Actions → Instagram Auto Post → Run workflow에서 게시 종류와 대상 날짜를 선택합니다.
 
-주의: 수동 실행도 실제 Instagram 피드에 게시됩니다. 같은 날짜/종류가 이미 성공했다면 중복 게시 방지 상태 파일 때문에 건너뜁니다.
+Instagram 계정 ID는 액세스 토큰의 `/me` 응답에서 자동으로 확인합니다.\n\n주의: 수동 실행도 실제 Instagram 피드에 게시됩니다. 같은 날짜/종류가 이미 성공했다면 중복 게시 방지 상태 파일 때문에 건너뜁니다.
