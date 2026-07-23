@@ -45,6 +45,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       META_API_VERSION: v23.0
       AUTOMATED_RUN: ${{ github.event_name == 'schedule' }}
       TARGET_DATE: ${{ inputs.target_date }}
