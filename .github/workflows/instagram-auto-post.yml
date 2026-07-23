@@ -46,6 +46,7 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       META_API_VERSION: v23.0
+      AUTOMATED_RUN: ${{ github.event_name == 'schedule' }}
       TARGET_DATE: ${{ inputs.target_date }}
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
       TEST_PUBLISH: ${{ inputs.test_publish || 'false' }}
