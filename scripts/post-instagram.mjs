@@ -25,6 +25,7 @@ const QUEUE_PATH = "_queue/instagram-schedule.json";
 const PUBLISHED_STATE_PREFIX = "_published-v2";
 const MAX_SCHEDULE_DELAY_MS = 60 * 60 * 1000;
 const AUTOMATED_RUN = process.env.AUTOMATED_RUN === "true";
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 let instagramAccessToken = INITIAL_INSTAGRAM_ACCESS_TOKEN;
 
 if (!["A", "B"].includes(SLOT)) {
@@ -199,6 +200,45 @@ async function responseJson(response, label) {
   return data;
 }
 
+function koreanTimestamp() {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+async function notifySlack(icon, title, lines = []) {
+  if (!SLACK_WEBHOOK_URL) {
+    console.warn("SLACK_WEBHOOK_URL is not configured; Slack notification skipped.");
+    return;
+  }
+
+  const text = [
+    `${icon} *${title}*`,
+    ...lines.filter(Boolean),
+    `• 시각: ${koreanTimestamp()} KST`,
+  ].join("\n");
+
+  try {
+    const response = await fetch(SLACK_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      console.warn(`Slack notification failed (${response.status}): ${await response.text()}`);
+    }
+  } catch (error) {
+    console.warn(`Slack notification failed: ${error.message}`);
+  }
+}
+
 function supabaseHeaders(contentType) {
   return {
     apikey: SUPABASE_SECRET_KEY,
@@ -260,13 +300,13 @@ async function syncScheduleQueue() {
   const rootEntries = await listStorage();
   const folders = rootEntries
     .map((entry) => entry.name)
-    .filter((name) => /^\\d{4}$/.test(name));
+    .filter((name) => /^\d{4}$/.test(name));
 
   const items = [];
   for (const folder of folders) {
     const files = await listStorage(folder);
     for (const file of files) {
-      const match = /^(\\d{2})(\\d{2})([AB])\\.png$/i.exec(file.name);
+      const match = /^(\d{2})(\d{2})([AB])\.png$/i.exec(file.name);
       if (!match) continue;
 
       const [, fileMonth, fileDay, rawSlot] = match;
@@ -357,6 +397,10 @@ async function prepareInstagramToken() {
     console.warn(
       `Instagram token refresh was skipped; the current token will be used: ${error.message}`
     );
+    await notifySlack("🔑", "Instagram 토큰 갱신 오류", [
+      `• 오류: ${error.message}`,
+      "• 현재 토큰으로 게시를 계속 시도합니다.",
+    ]);
   }
 }
 
@@ -440,6 +484,10 @@ async function main() {
     const due = dueQueueItem(queue, SLOT);
     if (!due) {
       console.log(`No due ${SLOT} post within the 60-minute safety window; skipping.`);
+      await notifySlack("⚠️", "Instagram 예약 건너뜀", [
+        `• 종류: ${SLOT === "A" ? "띠별운세(A)" : "별자리운세(B)"}`,
+        "• 사유: 현재 시각에 게시할 예약이 없거나 예약 후 60분이 지났습니다.",
+      ]);
       return;
     }
     info = dateInfo(parseIsoDate(due.targetDate));
@@ -455,6 +503,11 @@ async function main() {
 
   if (!testPublish && await alreadyPublished(statePath)) {
     console.log(`Already published; skipping ${info.iso} ${SLOT}.`);
+    await notifySlack("⚠️", "Instagram 중복 게시 방지", [
+      `• 대상: ${info.iso} ${SLOT}`,
+      `• 이미지: ${info.imagePath}`,
+      "• 사유: 이미 게시 완료 기록이 있습니다.",
+    ]);
     return;
   }
 
@@ -479,6 +532,11 @@ async function main() {
     }
     console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
     console.log(`Caption preview:\n${caption}`);
+    await notifySlack("🧪", "Instagram 점검 성공", [
+      `• 대상: ${info.iso} ${SLOT}`,
+      `• 이미지: ${info.imagePath}`,
+      "• 실제 게시: 안 함(dry run)",
+    ]);
     return;
   }
 
@@ -508,9 +566,21 @@ async function main() {
   }
 
   console.log(`Published successfully: ${published.id}`);
+  await notifySlack("✅", "Instagram 업로드 성공", [
+    `• 대상: ${info.iso} ${SLOT}`,
+    `• 종류: ${SLOT === "A" ? "띠별운세" : "별자리운세"}`,
+    `• 이미지: ${info.imagePath}`,
+    `• 미디어 ID: ${published.id}`,
+    `• 테스트 게시: ${testPublish ? "예" : "아니오"}`,
+  ]);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error.message);
+  await notifySlack("❌", "Instagram 업로드 실패", [
+    `• 종류: ${SLOT || "확인 불가"}`,
+    `• 대상일: ${TARGET_DATE || "자동 예약"}`,
+    `• 오류: ${error.message}`,
+  ]);
   process.exitCode = 1;
 });
