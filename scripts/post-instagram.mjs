@@ -200,33 +200,21 @@ async function responseJson(response, label) {
   return data;
 }
 
-function koreanTimestamp() {
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date());
-}
-
-async function notifySlack(icon, title, lines = []) {
+async function notifySlack(icon, title, detail = "") {
   if (!SLACK_WEBHOOK_URL) {
     console.warn("SLACK_WEBHOOK_URL is not configured; Slack notification skipped.");
     return;
   }
 
-  const text = [
-    `${icon} *${title}*`,
-    ...lines.filter(Boolean),
-    `• 시각: ${koreanTimestamp()} KST`,
-  ].join("\n");
+  const cleanDetail = String(detail)
+    .replace(/^•\\s*/g, "")
+    .replace(/\\s+/g, " ")
+    .trim()
+    .slice(0, 300);
+  const text = `${icon} *${title}*${cleanDetail ? ` | ${cleanDetail}` : ""}`;
 
   try {
-    const response = await fetch(SLACK_WEBHOOK_URL, {
+    const response = await fetch(SLACK_WEBHOOK_URL.trim(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -397,10 +385,7 @@ async function prepareInstagramToken() {
     console.warn(
       `Instagram token refresh was skipped; the current token will be used: ${error.message}`
     );
-    await notifySlack("🔑", "Instagram 토큰 갱신 오류", [
-      `• 오류: ${error.message}`,
-      "• 현재 토큰으로 게시를 계속 시도합니다.",
-    ]);
+    await notifySlack("🔑", "토큰 갱신 실패", error.message);
   }
 }
 
@@ -484,10 +469,7 @@ async function main() {
     const due = dueQueueItem(queue, SLOT);
     if (!due) {
       console.log(`No due ${SLOT} post within the 60-minute safety window; skipping.`);
-      await notifySlack("⚠️", "Instagram 예약 건너뜀", [
-        `• 종류: ${SLOT === "A" ? "띠별운세(A)" : "별자리운세(B)"}`,
-        "• 사유: 현재 시각에 게시할 예약이 없거나 예약 후 60분이 지났습니다.",
-      ]);
+      await notifySlack("⚠️", "예약 건너뜀", `${SLOT} · 예약 없음/60분 초과`);
       return;
     }
     info = dateInfo(parseIsoDate(due.targetDate));
@@ -503,11 +485,7 @@ async function main() {
 
   if (!testPublish && await alreadyPublished(statePath)) {
     console.log(`Already published; skipping ${info.iso} ${SLOT}.`);
-    await notifySlack("⚠️", "Instagram 중복 게시 방지", [
-      `• 대상: ${info.iso} ${SLOT}`,
-      `• 이미지: ${info.imagePath}`,
-      "• 사유: 이미 게시 완료 기록이 있습니다.",
-    ]);
+    await notifySlack("⚠️", "중복 방지", `${info.iso} ${SLOT}`);
     return;
   }
 
@@ -532,11 +510,7 @@ async function main() {
     }
     console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
     console.log(`Caption preview:\n${caption}`);
-    await notifySlack("🧪", "Instagram 점검 성공", [
-      `• 대상: ${info.iso} ${SLOT}`,
-      `• 이미지: ${info.imagePath}`,
-      "• 실제 게시: 안 함(dry run)",
-    ]);
+    await notifySlack("🧪", "점검 성공", `${info.iso} ${SLOT} · ${info.imagePath}`);
     return;
   }
 
@@ -566,21 +540,11 @@ async function main() {
   }
 
   console.log(`Published successfully: ${published.id}`);
-  await notifySlack("✅", "Instagram 업로드 성공", [
-    `• 대상: ${info.iso} ${SLOT}`,
-    `• 종류: ${SLOT === "A" ? "띠별운세" : "별자리운세"}`,
-    `• 이미지: ${info.imagePath}`,
-    `• 미디어 ID: ${published.id}`,
-    `• 테스트 게시: ${testPublish ? "예" : "아니오"}`,
-  ]);
+  await notifySlack("✅", "업로드 성공", `${info.iso} ${SLOT} · ${info.imagePath}`);
 }
 
 main().catch(async (error) => {
   console.error(error.message);
-  await notifySlack("❌", "Instagram 업로드 실패", [
-    `• 종류: ${SLOT || "확인 불가"}`,
-    `• 대상일: ${TARGET_DATE || "자동 예약"}`,
-    `• 오류: ${error.message}`,
-  ]);
+  await notifySlack("❌", "업로드 실패", `${SLOT || "?"} · ${error.message}`);
   process.exitCode = 1;
 });
