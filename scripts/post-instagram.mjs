@@ -27,6 +27,7 @@ const MAX_SCHEDULE_DELAY_MS = 60 * 60 * 1000;
 const AUTOMATED_RUN = process.env.AUTOMATED_RUN === "true";
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 let instagramAccessToken = INITIAL_INSTAGRAM_ACCESS_TOKEN;
+let activeInfo = null;
 
 if (!["A", "B"].includes(SLOT)) {
   throw new Error("SLOT must be A or B.");
@@ -469,7 +470,8 @@ async function main() {
     const due = dueQueueItem(queue, SLOT);
     if (!due) {
       console.log(`No due ${SLOT} post within the 60-minute safety window; skipping.`);
-      await notifySlack("⚠️", "예약 건너뜀", `${SLOT} · 예약 없음/60분 초과`);
+      const expected = dateInfo(targetDate());
+      await notifySlack("❌", `[${expected.iso}] 업로드 실패`, `${SLOT} · 예약 파일 없음/60분 초과`);
       return;
     }
     info = dateInfo(parseIsoDate(due.targetDate));
@@ -479,13 +481,13 @@ async function main() {
   } else {
     info = dateInfo(targetDate());
   }
+  activeInfo = info;
   const statePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-${SLOT}.json`;
 
   const testPublish = process.env.TEST_PUBLISH === "true";
 
   if (!testPublish && await alreadyPublished(statePath)) {
     console.log(`Already published; skipping ${info.iso} ${SLOT}.`);
-    await notifySlack("⚠️", "중복 방지", `${info.iso} ${SLOT}`);
     return;
   }
 
@@ -510,7 +512,7 @@ async function main() {
     }
     console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
     console.log(`Caption preview:\n${caption}`);
-    await notifySlack("🧪", "점검 성공", `${info.iso} ${SLOT} · ${info.imagePath}`);
+    await notifySlack("🧪", `[${info.iso} ${SLOT}] 점검 성공`);
     return;
   }
 
@@ -540,11 +542,22 @@ async function main() {
   }
 
   console.log(`Published successfully: ${published.id}`);
-  await notifySlack("✅", "업로드 성공", `${info.iso} ${SLOT} · ${info.imagePath}`);
+  if (!testPublish && SLOT === "B") {
+    const aStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-A.json`;
+    const bStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-B.json`;
+    const [aDone, bDone] = await Promise.all([
+      alreadyPublished(aStatePath),
+      alreadyPublished(bStatePath),
+    ]);
+    if (aDone && bDone) {
+      await notifySlack("✅", `[${info.iso}] 업로드 성공`);
+    }
+  }
 }
 
 main().catch(async (error) => {
   console.error(error.message);
-  await notifySlack("❌", "업로드 실패", `${SLOT || "?"} · ${error.message}`);
+  const label = activeInfo?.iso || TARGET_DATE || "날짜 확인 불가";
+  await notifySlack("❌", `[${label}] 업로드 실패`, `${SLOT || "?"} · ${error.message}`);
   process.exitCode = 1;
 });
