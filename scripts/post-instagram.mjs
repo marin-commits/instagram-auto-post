@@ -471,7 +471,7 @@ async function main() {
     if (!due) {
       console.log(`No due ${SLOT} post within the 60-minute safety window; skipping.`);
       const expected = dateInfo(targetDate());
-      await notifySlack("❌", `[${expected.iso}] 업로드 실패`, `${SLOT} · 예약 파일 없음/60분 초과`);
+      await notifySlack("❌", `[${expected.iso}] 인스타그램 업로드 실패`, `${SLOT} · 예약 파일 없음/60분 초과`);
       return;
     }
     info = dateInfo(parseIsoDate(due.targetDate));
@@ -512,7 +512,7 @@ async function main() {
     }
     console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
     console.log(`Caption preview:\n${caption}`);
-    await notifySlack("🧪", `[${info.iso} ${SLOT}] 점검 성공`);
+    await notifySlack("🧪", `[${info.iso} ${SLOT}] 인스타그램 점검 성공`);
     return;
   }
 
@@ -550,7 +550,7 @@ async function main() {
       alreadyPublished(bStatePath),
     ]);
     if (aDone && bDone) {
-      await notifySlack("✅", `[${info.iso}] 업로드 성공`);
+      await notifySlack("✅", `[${info.iso}] 인스타그램 업로드 성공`);
     }
   }
 }
@@ -558,6 +558,6 @@ async function main() {
 main().catch(async (error) => {
   console.error(error.message);
   const label = activeInfo?.iso || TARGET_DATE || "날짜 확인 불가";
-  await notifySlack("❌", `[${label}] 업로드 실패`, `${SLOT || "?"} · ${error.message}`);
+  await notifySlack("❌", `[${label}] 인스타그램 업로드 실패`, `${SLOT || "?"} · ${error.message}`);
   process.exitCode = 1;
 });
