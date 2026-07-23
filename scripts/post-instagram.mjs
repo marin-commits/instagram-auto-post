@@ -21,6 +21,10 @@ const TARGET_DATE = process.env.TARGET_DATE || "";
 const META_API_VERSION = process.env.META_API_VERSION || "v23.0";
 const TOKEN_STATE_PATH = "_config/instagram-token.json";
 const TOKEN_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const QUEUE_PATH = "_queue/instagram-schedule.json";
+const PUBLISHED_STATE_PREFIX = "_published-v2";
+const MAX_SCHEDULE_DELAY_MS = 60 * 60 * 1000;
+const AUTOMATED_RUN = process.env.AUTOMATED_RUN === "true";
 let instagramAccessToken = INITIAL_INSTAGRAM_ACCESS_TOKEN;
 
 if (!["A", "B"].includes(SLOT)) {
@@ -208,6 +212,95 @@ async function writePrivateJson(path, payload, upsert = true) {
   return responseJson(response, `Write private state ${path}`);
 }
 
+async function listStorage(prefix = "") {
+  const url = `${SUPABASE_URL}/storage/v1/object/list/${encodeURIComponent(SUPABASE_BUCKET)}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: supabaseHeaders("application/json"),
+    body: JSON.stringify({
+      prefix,
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: "name", order: "asc" },
+    }),
+  });
+  const data = await responseJson(response, `List storage ${prefix || "root"}`);
+  return Array.isArray(data) ? data : [];
+}
+
+function scheduleForTargetDate(targetDate, slot) {
+  const target = parseIsoDate(targetDate);
+  const hourUtc = slot === "A" ? 12 : 12;
+  const minuteUtc = slot === "A" ? 0 : 30;
+  return new Date(Date.UTC(
+    target.getUTCFullYear(),
+    target.getUTCMonth(),
+    target.getUTCDate() - 1,
+    hourUtc,
+    minuteUtc
+  ));
+}
+
+async function syncScheduleQueue() {
+  const rootEntries = await listStorage();
+  const folders = rootEntries
+    .map((entry) => entry.name)
+    .filter((name) => /^\\d{4}$/.test(name));
+
+  const items = [];
+  for (const folder of folders) {
+    const files = await listStorage(folder);
+    for (const file of files) {
+      const match = /^(\\d{2})(\\d{2})([AB])\\.png$/i.exec(file.name);
+      if (!match) continue;
+
+      const [, fileMonth, fileDay, rawSlot] = match;
+      const folderYear = 2000 + Number(folder.slice(0, 2));
+      const folderMonth = folder.slice(2, 4);
+      if (fileMonth !== folderMonth) {
+        console.warn(`Skipping mismatched path: ${folder}/${file.name}`);
+        continue;
+      }
+
+      const slot = rawSlot.toUpperCase();
+      const targetDate = `${folderYear}-${fileMonth}-${fileDay}`;
+      try {
+        parseIsoDate(targetDate);
+      } catch {
+        console.warn(`Skipping invalid date file: ${folder}/${file.name}`);
+        continue;
+      }
+
+      items.push({
+        id: `${targetDate}-${slot}`,
+        targetDate,
+        slot,
+        imagePath: `${folder}/${file.name}`,
+        publishAt: scheduleForTargetDate(targetDate, slot).toISOString(),
+      });
+    }
+  }
+
+  items.sort((a, b) => a.publishAt.localeCompare(b.publishAt));
+  await writePrivateJson(QUEUE_PATH, {
+    timeZone: "Asia/Seoul",
+    generatedAt: new Date().toISOString(),
+    count: items.length,
+    items,
+  });
+  console.log(`Schedule queue synced: ${items.length} image(s).`);
+  return items;
+}
+
+function dueQueueItem(items, slot, now = new Date()) {
+  return items.find((item) => {
+    if (item.slot !== slot) return false;
+    const publishAt = Date.parse(item.publishAt);
+    const delay = now.getTime() - publishAt;
+    return delay >= 0 && delay <= MAX_SCHEDULE_DELAY_MS;
+  });
+}
+
 async function prepareInstagramToken() {
   const stored = await readPrivateJson(TOKEN_STATE_PATH);
   if (stored?.accessToken) {
@@ -326,8 +419,22 @@ async function savePublishedState(statePath, payload) {
 async function main() {
   await prepareInstagramToken();
 
-  const info = dateInfo(targetDate());
-  const statePath = `_published/${info.iso}-${SLOT}.json`;
+  let info;
+  if (AUTOMATED_RUN) {
+    const queue = await syncScheduleQueue();
+    const due = dueQueueItem(queue, SLOT);
+    if (!due) {
+      console.log(`No due ${SLOT} post within the 60-minute safety window; skipping.`);
+      return;
+    }
+    info = dateInfo(parseIsoDate(due.targetDate));
+    if (info.imagePath !== due.imagePath) {
+      throw new Error(`Queue path mismatch: ${due.imagePath} !== ${info.imagePath}`);
+    }
+  } else {
+    info = dateInfo(targetDate());
+  }
+  const statePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-${SLOT}.json`;
 
   const testPublish = process.env.TEST_PUBLISH === "true";
 
