@@ -42,6 +42,21 @@ function koreanTodayParts() {
   return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 }
 
+function parseIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Date must use YYYY-MM-DD.");
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const normalized = [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+  if (normalized !== value) throw new Error(`Invalid date: ${value}`);
+  return date;
+}
+
 function targetDate() {
   if (TARGET_DATE) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(TARGET_DATE)) {
