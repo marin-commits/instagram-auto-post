@@ -23,7 +23,7 @@ const TOKEN_STATE_PATH = "_config/instagram-token.json";
 const TOKEN_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const QUEUE_PATH = "_queue/instagram-schedule.json";
 const PUBLISHED_STATE_PREFIX = "_published-v2";
-const MAX_SCHEDULE_DELAY_MS = 60 * 60 * 1000;
+const MAX_SCHEDULE_DELAY_MS = 2 * 60 * 60 * 1000;
 const AUTOMATED_RUN = process.env.AUTOMATED_RUN === "true";
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
 let instagramAccessToken = INITIAL_INSTAGRAM_ACCESS_TOKEN;
@@ -275,7 +275,7 @@ async function listStorage(prefix = "") {
 function scheduleForTargetDate(targetDate, slot) {
   const target = parseIsoDate(targetDate);
   const hourUtc = slot === "A" ? 12 : 12;
-  const minuteUtc = slot === "A" ? 0 : 30;
+  const minuteUtc = slot === "A" ? 5 : 35;
   return new Date(Date.UTC(
     target.getUTCFullYear(),
     target.getUTCMonth(),
@@ -469,9 +469,7 @@ async function main() {
     const queue = await syncScheduleQueue();
     const due = dueQueueItem(queue, SLOT);
     if (!due) {
-      console.log(`No due ${SLOT} post within the 60-minute safety window; skipping.`);
-      const expected = dateInfo(targetDate());
-      await notifySlack("❌", `[${expected.iso}] 인스타그램 업로드 실패`, `${SLOT} · 예약 파일 없음/60분 초과`);
+      console.log(`No due ${SLOT} post within the retry window; skipping.`);
       return;
     }
     info = dateInfo(parseIsoDate(due.targetDate));
