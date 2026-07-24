@@ -4,9 +4,6 @@ on:
   schedule:
     # 20:05~22:55 KST, every 10 minutes. Repeated checks absorb delayed/dropped cron events.
     - cron: "5,15,25,35,45,55 11-13 * * *"
-  push:
-    paths:
-      - ".github/instagram-trigger"
   workflow_dispatch:
     inputs:
       slot:
@@ -49,7 +46,7 @@ jobs:
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       META_API_VERSION: v23.0
-      AUTOMATED_RUN: ${{ github.event_name == 'schedule' || github.event_name == 'push' }}
+      AUTOMATED_RUN: ${{ github.event_name == 'schedule' }}
       TARGET_DATE: ${{ inputs.target_date }}
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
       TEST_PUBLISH: ${{ inputs.test_publish || 'false' }}
@@ -67,7 +64,7 @@ jobs:
       - name: Publish Instagram feed image
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
             status=0
             for slot in A B; do
               SLOT="$slot" node scripts/post-instagram.mjs || status=1
