@@ -1,9 +1,6 @@
 name: Instagram Auto Post
 
 on:
-  schedule:
-    # 20:05~22:55 KST, every 10 minutes. Repeated checks absorb delayed/dropped cron events.
-    - cron: "5,15,25,35,45,55 11-13 * * *"
   workflow_dispatch:
     inputs:
       slot:
@@ -32,7 +29,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: instagram-${{ github.event_name }}-${{ inputs.slot || 'scheduled-check' }}
+  group: instagram-dispatch-${{ inputs.slot }}-${{ inputs.target_date || 'tomorrow' }}
   cancel-in-progress: false
 
 jobs:
@@ -46,7 +43,7 @@ jobs:
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       META_API_VERSION: v23.0
-      AUTOMATED_RUN: ${{ github.event_name == 'schedule' }}
+      AUTOMATED_RUN: false
       TARGET_DATE: ${{ inputs.target_date }}
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
       TEST_PUBLISH: ${{ inputs.test_publish || 'false' }}
@@ -63,12 +60,4 @@ jobs:
 
       - name: Publish Instagram feed image
         shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            status=0
-            for slot in A B; do
-              SLOT="$slot" node scripts/post-instagram.mjs || status=1
-            done
-            exit "$status"
-          fi
-          node scripts/post-instagram.mjs
+        run: node scripts/post-instagram.mjs
