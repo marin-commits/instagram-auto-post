@@ -1,3 +1,5 @@
+import sharp from "sharp";
+
 const REQUIRED_ENV = [
   "INSTAGRAM_ACCESS_TOKEN",
   "SUPABASE_URL",
@@ -20,6 +22,7 @@ const SLOT = (process.env.SLOT || "").toUpperCase();
 const TARGET_DATE = process.env.TARGET_DATE || "";
 const META_API_VERSION = process.env.META_API_VERSION || "v23.0";
 const TOKEN_STATE_PATH = "_config/instagram-token.json";
+const PUBLISH_CACHE_BUCKET = "instagram-publish-cache";
 const TOKEN_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const QUEUE_PATH = "_queue/instagram-schedule.json";
 const PUBLISHED_STATE_PREFIX = "_published-v2";
@@ -413,6 +416,78 @@ async function createSignedImageUrl(imagePath) {
     : `${SUPABASE_URL}/storage/v1${signedPath}`;
 }
 
+async function ensurePublicCacheBucket() {
+  const bucketUrl = `${SUPABASE_URL}/storage/v1/bucket/${encodeURIComponent(PUBLISH_CACHE_BUCKET)}`;
+  const existing = await fetch(bucketUrl, { headers: supabaseHeaders() });
+
+  if (existing.ok) {
+    const bucket = await responseJson(existing, "Read publish cache bucket");
+    if (bucket.public !== true) {
+      throw new Error(`Supabase bucket ${PUBLISH_CACHE_BUCKET} exists but is not public.`);
+    }
+    return;
+  }
+  if (existing.status !== 404) await responseJson(existing, "Read publish cache bucket");
+
+  const created = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+    method: "POST",
+    headers: supabaseHeaders("application/json"),
+    body: JSON.stringify({
+      id: PUBLISH_CACHE_BUCKET,
+      name: PUBLISH_CACHE_BUCKET,
+      public: true,
+      file_size_limit: 10485760,
+      allowed_mime_types: ["image/jpeg"],
+    }),
+  });
+  await responseJson(created, "Create public publish cache bucket");
+}
+
+async function createMetaImageUrl(imagePath, info) {
+  await ensurePublicCacheBucket();
+
+  const sourceUrl = await createSignedImageUrl(imagePath);
+  const source = await fetch(sourceUrl);
+  if (!source.ok) throw new Error(`Download source image failed (${source.status}).`);
+
+  const jpeg = await sharp(Buffer.from(await source.arrayBuffer()))
+    .rotate()
+    .flatten({ background: "#ffffff" })
+    .toColorspace("srgb")
+    .jpeg({ quality: 95, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+
+  const cachePath = `${info.iso}-${SLOT}-${Date.now()}.jpg`;
+  const objectUrl = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(PUBLISH_CACHE_BUCKET)}/${encodePath(cachePath)}`;
+  const uploaded = await fetch(objectUrl, {
+    method: "POST",
+    headers: {
+      ...supabaseHeaders("image/jpeg"),
+      "x-upsert": "false",
+      "Cache-Control": "no-store",
+    },
+    body: jpeg,
+  });
+  await responseJson(uploaded, "Upload temporary JPEG");
+
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${encodeURIComponent(PUBLISH_CACHE_BUCKET)}/${encodePath(cachePath)}`;
+  const check = await fetch(publicUrl, { cache: "no-store" });
+  const contentType = check.headers.get("content-type") || "";
+  if (!check.ok || !contentType.toLowerCase().startsWith("image/jpeg")) {
+    throw new Error(`Temporary JPEG check failed (${check.status}, ${contentType || "unknown content type"}).`);
+  }
+  return { publicUrl, cachePath };
+}
+
+async function deleteMetaImage(cachePath) {
+  if (!cachePath) return;
+  const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(PUBLISH_CACHE_BUCKET)}/${encodePath(cachePath)}`;
+  const response = await fetch(url, { method: "DELETE", headers: supabaseHeaders() });
+  if (!response.ok && response.status !== 404) {
+    console.warn(`Temporary JPEG cleanup failed (${response.status}): ${await response.text()}`);
+  }
+}
+
 async function graphPost(path, values) {
   const body = new URLSearchParams({
     ...values,
@@ -490,66 +565,63 @@ async function main() {
   }
 
   console.log(`Preparing ${info.iso} ${SLOT}: ${info.imagePath}`);
-  const imageUrl = await createSignedImageUrl(info.imagePath);
   const caption = captionFor(info);
+  let cachePath = "";
 
-  const account = await graphGet("me", { fields: "user_id,username" });
-  const instagramUserId = account.user_id || account.id;
-  if (!instagramUserId) {
-    throw new Error("Instagram /me did not return user_id.");
-  }
+  try {
+    const preparedImage = await createMetaImageUrl(info.imagePath, info);
+    cachePath = preparedImage.cachePath;
+    const imageUrl = preparedImage.publicUrl;
 
-  if (process.env.DRY_RUN === "true") {
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      throw new Error(`Signed image check failed (${imageResponse.status}).`);
+    const account = await graphGet("me", { fields: "user_id,username" });
+    const instagramUserId = account.user_id || account.id;
+    if (!instagramUserId) throw new Error("Instagram /me did not return user_id.");
+
+    if (process.env.DRY_RUN === "true") {
+      console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
+      console.log(`Caption preview:\n${caption}`);
+      await notifySlack("🧪", `[${info.iso} ${SLOT}] 인스타그램 점검 성공`);
+      return;
     }
-    const contentType = imageResponse.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) {
-      throw new Error(`Expected an image but received: ${contentType || "unknown"}`);
-    }
-    console.log(`Dry run successful for @${account.username || "unknown"} (ID: ${instagramUserId}).`);
-    console.log(`Caption preview:\n${caption}`);
-    await notifySlack("🧪", `[${info.iso} ${SLOT}] 인스타그램 점검 성공`);
-    return;
-  }
 
-  const container = await graphPost(`${instagramUserId}/media`, {
-    image_url: imageUrl,
-    caption,
-  });
-  if (!container.id) throw new Error("Instagram did not return a container ID.");
-
-  await waitForContainer(container.id);
-
-  const published = await graphPost(`${instagramUserId}/media_publish`, {
-    creation_id: container.id,
-  });
-  if (!published.id) throw new Error("Instagram did not return a media ID.");
-
-  if (!testPublish) {
-    await savePublishedState(statePath, {
-      targetDate: info.iso,
-      slot: SLOT,
-      imagePath: info.imagePath,
-      mediaId: published.id,
-      publishedAt: new Date().toISOString(),
+    const container = await graphPost(`${instagramUserId}/media`, {
+      image_url: imageUrl,
+      caption,
     });
-  } else {
-    console.log("Test publish mode: duplicate-prevention state was not saved.");
-  }
+    if (!container.id) throw new Error("Instagram did not return a container ID.");
 
-  console.log(`Published successfully: ${published.id}`);
-  if (!testPublish && SLOT === "B") {
-    const aStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-A.json`;
-    const bStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-B.json`;
-    const [aDone, bDone] = await Promise.all([
-      alreadyPublished(aStatePath),
-      alreadyPublished(bStatePath),
-    ]);
-    if (aDone && bDone) {
-      await notifySlack("✅", `[${info.iso}] 인스타그램 업로드 성공`);
+    await waitForContainer(container.id);
+    const published = await graphPost(`${instagramUserId}/media_publish`, {
+      creation_id: container.id,
+    });
+    if (!published.id) throw new Error("Instagram did not return a media ID.");
+
+    if (!testPublish) {
+      await savePublishedState(statePath, {
+        targetDate: info.iso,
+        slot: SLOT,
+        imagePath: info.imagePath,
+        mediaId: published.id,
+        publishedAt: new Date().toISOString(),
+      });
+    } else {
+      console.log("Test publish mode: duplicate-prevention state was not saved.");
     }
+
+    console.log(`Published successfully: ${published.id}`);
+    if (!testPublish && SLOT === "B") {
+      const aStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-A.json`;
+      const bStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-B.json`;
+      const [aDone, bDone] = await Promise.all([
+        alreadyPublished(aStatePath),
+        alreadyPublished(bStatePath),
+      ]);
+      if (aDone && bDone) {
+        await notifySlack("✅", `[${info.iso}] 인스타그램 업로드 성공`);
+      }
+    }
+  } finally {
+    await deleteMetaImage(cachePath);
   }
 }
 
