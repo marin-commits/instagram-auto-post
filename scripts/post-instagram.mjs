@@ -427,7 +427,13 @@ async function ensurePublicCacheBucket() {
     }
     return;
   }
-  if (existing.status !== 404) await responseJson(existing, "Read publish cache bucket");
+
+  const errorBody = await existing.clone().json().catch(() => ({}));
+  const bucketMissing =
+    existing.status === 404 ||
+    (existing.status === 400 &&
+      (errorBody.code === "NoSuchBucket" || String(errorBody.statusCode) === "404"));
+  if (!bucketMissing) await responseJson(existing, "Read publish cache bucket");
 
   const created = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
     method: "POST",
