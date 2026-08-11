@@ -609,7 +609,7 @@ async function main() {
     }
 
     console.log(`Published successfully: ${published.id}`);
-    if (!testPublish && SLOT === "B") {
+    if (!testPublish) {
       const aStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-A.json`;
       const bStatePath = `${PUBLISHED_STATE_PREFIX}/${info.iso}-B.json`;
       const [aDone, bDone] = await Promise.all([
