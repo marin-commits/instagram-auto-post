@@ -529,6 +529,34 @@ async function waitForContainer(containerId) {
   throw new Error("Instagram image processing timed out.");
 }
 
+async function publishContainerWithRetry(instagramUserId, containerId) {
+  const maxAttempts = 6;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (attempt > 1) {
+      console.log(`Instagram media is not ready; retrying publish (${attempt}/${maxAttempts}).`);
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+    }
+
+    try {
+      return await graphPost(`${instagramUserId}/media_publish`, {
+        creation_id: containerId,
+      });
+    } catch (error) {
+      const message = String(error?.message || error);
+      const mediaNotReady =
+        message.includes('"code":9007') ||
+        message.includes('"error_subcode":2207027') ||
+        message.includes("Media ID is not available") ||
+        message.includes("not ready for publishing");
+
+      if (!mediaNotReady || attempt === maxAttempts) throw error;
+    }
+  }
+
+  throw new Error("Instagram media did not become ready for publishing.");
+}
+
 async function savePublishedState(statePath, payload) {
   const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_BUCKET)}/${encodePath(statePath)}`;
   const response = await fetch(url, {
@@ -597,9 +625,7 @@ async function main() {
     if (!container.id) throw new Error("Instagram did not return a container ID.");
 
     await waitForContainer(container.id);
-    const published = await graphPost(`${instagramUserId}/media_publish`, {
-      creation_id: container.id,
-    });
+    const published = await publishContainerWithRetry(instagramUserId, container.id);
     if (!published.id) throw new Error("Instagram did not return a media ID.");
 
     if (!testPublish) {
