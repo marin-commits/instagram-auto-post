@@ -1,0 +1,39 @@
+name: Repost 2026-10-01 B once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/repost-2026-10-01-b-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  repost:
+    if: contains(github.event.head_commit.added, '.github/workflows/repost-2026-10-01-b-once.yml')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      META_API_VERSION: v23.0
+      AUTOMATED_RUN: false
+      TARGET_DATE: '2026-10-01'
+      DRY_RUN: 'false'
+      TEST_PUBLISH: 'true'
+      SLOT: B
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: Repost Instagram feed image
+        run: node scripts/post-instagram.mjs
