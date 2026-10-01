@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 const SITE = "https://event.forceteller.com/outsourced";
 const BUCKET = process.env.SUPABASE_BUCKET || "insta-images";
 const DRY_RUN = process.env.DRY_RUN === "true";
+const VERIFY_EXISTING = process.env.VERIFY_EXISTING === "true";
 const REQUIRED = ["SUPABASE_URL", "SUPABASE_SECRET_KEY"];
 for (const key of REQUIRED) {
   if (!process.env[key]) throw new Error(`Missing ${key}`);
@@ -64,6 +65,12 @@ async function existingNames() {
   const entries = await (await checked(response, "List monthly storage")).json();
   if (!Array.isArray(entries)) throw new Error("Storage list was not an array");
   return new Set(entries.map((item) => item.name));
+}
+
+async function downloadExisting(path) {
+  const url = `${process.env.SUPABASE_URL}/storage/v1/object/authenticated/${encodeURIComponent(BUCKET)}/${path}`;
+  const response = await fetch(url, { headers: storageHeaders() });
+  return Buffer.from(await (await checked(response, `Download existing ${path}`)).arrayBuffer());
 }
 
 async function downloadZip(page, slot, tempDir) {
@@ -128,8 +135,10 @@ async function notify(text) {
 
 async function main() {
   const before = await existingNames();
-  if (!DRY_RUN && [...expected.keys()].every((name) => before.has(name))) {
-    console.log(`${expectedMonth}: all ${expected.size} images already exist; no download needed.`);
+  if (!DRY_RUN && !VERIFY_EXISTING && [...expected.keys()].every((name) => before.has(name))) {
+    const summary = `${expectedMonth} 띠별·별자리 운세: 0장 업로드, ${expected.size}장 기존 파일 유지 (이미 준비됨)`;
+    console.log(summary);
+    await notify(`✅ ${summary}`);
     return;
   }
   const tempDir = await mkdtemp(join(tmpdir(), "fortune-month-"));
@@ -146,6 +155,22 @@ async function main() {
     }
     if (images.size !== expected.size) throw new Error(`Expected ${expected.size} images, got ${images.size}`);
     const existing = before;
+    let verified = 0;
+    if (VERIFY_EXISTING) {
+      const mismatches = [];
+      for (const [name, { path }] of expected) {
+        if (!existing.has(name)) continue;
+        const actual = await downloadExisting(path);
+        const sourceHash = createHash("sha256").update(images.get(name)).digest("hex");
+        const storedHash = createHash("sha256").update(actual).digest("hex");
+        if (storedHash !== sourceHash) mismatches.push(path);
+        else verified += 1;
+      }
+      if (mismatches.length) {
+        throw new Error(`원본과 다른 기존 이미지 ${mismatches.length}장: ${mismatches.join(", ").slice(0, 400)}`);
+      }
+      console.log(`원본 이미지와 기존 파일 ${verified}장 일치`);
+    }
     let uploaded = 0;
     let skipped = 0;
     for (const [name, { path }] of expected) {
@@ -176,7 +201,7 @@ async function main() {
     const result = await existingNames();
     const missing = [...expected.keys()].filter((name) => !result.has(name));
     if (!DRY_RUN && missing.length) throw new Error(`Upload incomplete: ${missing.length} missing, e.g. ${missing.slice(0, 3).join(", ")}`);
-    const summary = `${expectedMonth} 띠별·별자리 운세: ${uploaded}장 업로드, ${skipped}장 기존 파일 유지${DRY_RUN ? " (점검 실행)" : ""}`;
+    const summary = `${expectedMonth} 띠별·별자리 운세: ${uploaded}장 업로드, ${skipped}장 기존 파일 유지${VERIFY_EXISTING ? `, 기존 ${verified}장 원본 일치` : ""}${DRY_RUN ? " (점검 실행)" : ""}`;
     console.log(summary);
     await notify(`✅ ${summary}`);
   } finally {
