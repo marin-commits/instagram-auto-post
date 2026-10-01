@@ -1,0 +1,47 @@
+name: Import next month's fortune images
+
+on:
+  schedule:
+    # 09:00 KST on the 1st; the 2nd is a recovery attempt if the first run failed.
+    - cron: "0 0 1,2 * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Validate next month's ZIPs without uploading"
+        required: true
+        type: boolean
+        default: true
+  push:
+    paths:
+      - ".github/workflows/import-monthly-fortunes.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instagram-monthly-fortunes
+  cancel-in-progress: false
+
+jobs:
+  import:
+    if: github.event_name != 'push' || github.event.head_commit.message == 'Start November fortune import'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Download and upload next month's A and B images
+        run: node scripts/import-monthly-fortunes.mjs
