@@ -1,4 +1,4 @@
-name: One-time read-only November fortune comparison
+name: One-time read-only November fortune pixel comparison
 on:
   push:
     paths:
