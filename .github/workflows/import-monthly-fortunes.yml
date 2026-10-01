@@ -11,6 +11,11 @@ on:
         required: true
         type: boolean
         default: true
+      verify_existing:
+        description: "Compare existing Supabase images with the source ZIPs (read-only)"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ jobs:
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      VERIFY_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_existing || 'false' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
