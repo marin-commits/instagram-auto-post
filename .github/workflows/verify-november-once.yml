@@ -1,0 +1,26 @@
+name: One-time read-only November fortune comparison
+on:
+  push:
+    paths:
+      - ".github/workflows/verify-november-once.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+      DRY_RUN: "true"
+      VERIFY_EXISTING: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --omit=dev --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/import-monthly-fortunes.mjs
