@@ -128,7 +128,7 @@ async function notify(text) {
 
 async function main() {
   const before = await existingNames();
-  if ([...expected.keys()].every((name) => before.has(name))) {
+  if (!DRY_RUN && [...expected.keys()].every((name) => before.has(name))) {
     console.log(`${expectedMonth}: all ${expected.size} images already exist; no download needed.`);
     return;
   }
