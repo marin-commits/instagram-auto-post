@@ -1,4 +1,4 @@
-name: One-time read-only November fortune pixel comparison
+name: One-time monthly Slack notification check
 on:
   push:
     paths:
@@ -6,16 +6,16 @@ on:
 permissions:
   contents: read
 jobs:
-  verify:
+  notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
-      DRY_RUN: "true"
-      VERIFY_EXISTING: "true"
-      COMPARE_SAMPLE_DIR: "comparison-samples"
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      DRY_RUN: "false"
+      VERIFY_EXISTING: "false"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -23,11 +23,4 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci --omit=dev --no-audit --no-fund
-      - run: npx playwright install --with-deps chromium
       - run: node scripts/import-monthly-fortunes.mjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: november-comparison-samples
-          path: comparison-samples/
-          retention-days: 1
