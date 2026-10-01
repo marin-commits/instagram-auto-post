@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import { unzipSync } from "fflate";
 import sharp from "sharp";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -136,7 +136,7 @@ async function notify(text) {
 async function main() {
   const before = await existingNames();
   if (!DRY_RUN && !VERIFY_EXISTING && [...expected.keys()].every((name) => before.has(name))) {
-    const summary = `${expectedMonth} 띠별·별자리 운세: 0장 업로드, ${expected.size}장 기존 파일 유지 (이미 준비됨)`;
+    const summary = `${expectedMonth} 띠별·별자리 운세: 0장 업로드, ${expected.size}장 기존 파일 유지 (파일 존재 확인, 내용 미검증)`;
     console.log(summary);
     await notify(`✅ ${summary}`);
     return;
@@ -181,11 +181,6 @@ async function main() {
           continue;
         }
         mismatches.push(path);
-        if (process.env.COMPARE_SAMPLE_DIR && mismatches.length <= 2) {
-          await mkdir(process.env.COMPARE_SAMPLE_DIR, { recursive: true });
-          await writeFile(join(process.env.COMPARE_SAMPLE_DIR, `${name}-source.png`), source);
-          await writeFile(join(process.env.COMPARE_SAMPLE_DIR, `${name}-stored.png`), actual);
-        }
         if (mismatches.length <= 3) {
           let sampledError = "different dimensions";
           if (sameShape) {
