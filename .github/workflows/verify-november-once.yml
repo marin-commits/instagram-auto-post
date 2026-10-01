@@ -15,6 +15,7 @@ jobs:
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       DRY_RUN: "true"
       VERIFY_EXISTING: "true"
+      COMPARE_SAMPLE_DIR: "comparison-samples"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -24,3 +25,9 @@ jobs:
       - run: npm ci --omit=dev --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: node scripts/import-monthly-fortunes.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: november-comparison-samples
+          path: comparison-samples/
+          retention-days: 1
