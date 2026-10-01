@@ -160,11 +160,40 @@ async function main() {
       const mismatches = [];
       for (const [name, { path }] of expected) {
         if (!existing.has(name)) continue;
+        const source = images.get(name);
         const actual = await downloadExisting(path);
-        const sourceHash = createHash("sha256").update(images.get(name)).digest("hex");
+        const sourceHash = createHash("sha256").update(source).digest("hex");
         const storedHash = createHash("sha256").update(actual).digest("hex");
-        if (storedHash !== sourceHash) mismatches.push(path);
-        else verified += 1;
+        if (storedHash === sourceHash) {
+          verified += 1;
+          continue;
+        }
+        // A PNG can be re-encoded without changing the actual image.
+        const [sourcePixels, storedPixels] = await Promise.all([
+          sharp(source).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+          sharp(actual).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+        ]);
+        const sameShape = sourcePixels.info.width === storedPixels.info.width &&
+          sourcePixels.info.height === storedPixels.info.height &&
+          sourcePixels.info.channels === storedPixels.info.channels;
+        if (sameShape && sourcePixels.data.equals(storedPixels.data)) {
+          verified += 1;
+          continue;
+        }
+        mismatches.push(path);
+        if (mismatches.length <= 3) {
+          let sampledError = "different dimensions";
+          if (sameShape) {
+            let delta = 0;
+            let samples = 0;
+            for (let i = 0; i < sourcePixels.data.length; i += 128) {
+              delta += Math.abs(sourcePixels.data[i] - storedPixels.data[i]);
+              samples += 1;
+            }
+            sampledError = `sampled pixel difference ${(delta / samples).toFixed(2)}/255`;
+          }
+          console.log(`Mismatch ${path}: source ${source.length} bytes ${sourcePixels.info.width}x${sourcePixels.info.height}; stored ${actual.length} bytes ${storedPixels.info.width}x${storedPixels.info.height}; ${sampledError}`);
+        }
       }
       if (mismatches.length) {
         throw new Error(`원본과 다른 기존 이미지 ${mismatches.length}장: ${mismatches.join(", ").slice(0, 400)}`);
