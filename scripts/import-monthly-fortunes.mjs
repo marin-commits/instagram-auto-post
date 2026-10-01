@@ -10,7 +10,7 @@ const SITE = "https://event.forceteller.com/outsourced";
 const BUCKET = process.env.SUPABASE_BUCKET || "insta-images";
 const DRY_RUN = process.env.DRY_RUN === "true";
 const VERIFY_EXISTING = process.env.VERIFY_EXISTING === "true";
-const REQUIRED = ["SUPABASE_URL", "SUPABASE_SECRET_KEY"];
+const REQUIRED = ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "SLACK_WEBHOOK_URL"];
 for (const key of REQUIRED) {
   if (!process.env[key]) throw new Error(`Missing ${key}`);
 }
@@ -122,15 +122,10 @@ async function parseZip(zipPath, slot) {
 }
 
 async function notify(text) {
-  if (!process.env.SLACK_WEBHOOK_URL) return;
-  try {
-    const response = await fetch(process.env.SLACK_WEBHOOK_URL.trim(), {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
-    });
-    await checked(response, "Slack notification");
-  } catch (error) {
-    console.warn(`Slack notification failed: ${error.message}`);
-  }
+  const response = await fetch(process.env.SLACK_WEBHOOK_URL.trim(), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+  });
+  await checked(response, "Slack notification");
 }
 
 async function main() {
