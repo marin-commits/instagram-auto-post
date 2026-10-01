@@ -127,6 +127,11 @@ async function notify(text) {
 }
 
 async function main() {
+  const before = await existingNames();
+  if ([...expected.keys()].every((name) => before.has(name))) {
+    console.log(`${expectedMonth}: all ${expected.size} images already exist; no download needed.`);
+    return;
+  }
   const tempDir = await mkdtemp(join(tmpdir(), "fortune-month-"));
   let browser;
   try {
@@ -140,7 +145,7 @@ async function main() {
       for (const [name, buffer] of await parseZip(archive, slot)) images.set(name, buffer);
     }
     if (images.size !== expected.size) throw new Error(`Expected ${expected.size} images, got ${images.size}`);
-    const existing = await existingNames();
+    const existing = before;
     let uploaded = 0;
     let skipped = 0;
     for (const [name, { path }] of expected) {
