@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   import:
-    if: github.event_name != 'push' || github.event.head_commit.message == 'Start November fortune import'
+    if: github.event_name != 'push' || github.event.head_commit.message == 'Validate monthly download'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -32,7 +32,7 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) || (github.event_name == 'push' && github.event.head_commit.message == 'Validate monthly download') || 'false' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
