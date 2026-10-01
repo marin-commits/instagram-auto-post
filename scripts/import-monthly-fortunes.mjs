@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import { unzipSync } from "fflate";
 import sharp from "sharp";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -181,6 +181,11 @@ async function main() {
           continue;
         }
         mismatches.push(path);
+        if (process.env.COMPARE_SAMPLE_DIR && mismatches.length <= 2) {
+          await mkdir(process.env.COMPARE_SAMPLE_DIR, { recursive: true });
+          await writeFile(join(process.env.COMPARE_SAMPLE_DIR, `${name}-source.png`), source);
+          await writeFile(join(process.env.COMPARE_SAMPLE_DIR, `${name}-stored.png`), actual);
+        }
         if (mismatches.length <= 3) {
           let sampledError = "different dimensions";
           if (sameShape) {
