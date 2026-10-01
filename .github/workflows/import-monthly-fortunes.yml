@@ -26,7 +26,10 @@ concurrency:
 
 jobs:
   import:
-    runs-on: ubuntu-latest
+    # The site renders each PNG in the browser with system fonts (skipFonts), so the
+    # result depends on the OS. macOS renders with Apple SD Gothic Neo like the
+    # images prepared by hand; Ubuntu falls back to wider Noto CJK and clips text.
+    runs-on: macos-latest
     timeout-minutes: 30
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -35,6 +38,7 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
       VERIFY_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_existing || 'false' }}
+      COMPARE_SAMPLE_DIR: comparison-samples
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -44,6 +48,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --omit=dev --no-audit --no-fund
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Download and upload next month's A and B images
         run: node scripts/import-monthly-fortunes.mjs
+      - name: Keep comparison samples
+        if: always() && env.VERIFY_EXISTING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-samples
+          path: comparison-samples/
+          retention-days: 7
+          if-no-files-found: ignore
