@@ -18,8 +18,10 @@ const MAX_BYTES = 10000000;
 // anti-aliasing; a different date/sign changes whole text lines.
 const CMP_WIDTH = 270;
 const CMP_HEIGHT = 338;
-const SAME_MAX_MEAN = 2.0;       // mean absolute difference (0-255)
-const SAME_MAX_CHANGED = 0.005;  // share of pixels differing by more than 48
+// Measured 2026-10: same content on macOS <= 0.10 mean / 0.00%; next day's image 10.2 / 8.8%;
+// one changed text line is roughly 0.15% of pixels.
+const SAME_MAX_MEAN = 0.5;       // mean absolute difference (0-255)
+const SAME_MAX_CHANGED = 0.0003; // share of pixels differing by more than 48
 
 const pad = (value) => String(value).padStart(2, "0");
 
@@ -232,7 +234,7 @@ async function main() {
         if (!before.has(name)) continue;
         const stored = await downloadStored(path);
         const result = await compareImages(images.get(name), stored);
-        console.log(`${path}: ${result.exact ? "exact" : `mean ${result.mean.toFixed(2)}, changed ${(result.changed * 100).toFixed(2)}%`} → ${result.same ? "same" : "DIFFERENT"}`);
+        console.log(`${path}: ${result.exact ? "exact" : `mean ${result.mean.toFixed(2)}, changed ${(result.changed * 100).toFixed(3)}%`} → ${result.same ? "same" : "DIFFERENT"}`);
         if (result.exact) exact += 1;
         else if (result.same) similar += 1;
         else mismatches.push(name);
