@@ -185,6 +185,15 @@ async function notify(text) {
   await checked(response, "Slack notification");
 }
 
+// Success alerts go to Slack only on the 1st (KST); other days log only. Failures always alert.
+async function notifySuccess(text) {
+  if (today.day !== "01") {
+    console.log(`Slack 성공 알림 생략(매월 1일만 발송): ${today.month}/${today.day}`);
+    return;
+  }
+  await notify(text);
+}
+
 async function summary(lines) {
   console.log(lines.join("\n"));
   if (process.env.GITHUB_STEP_SUMMARY) {
@@ -206,7 +215,7 @@ async function main() {
   if (!DRY_RUN && !VERIFY_EXISTING && initial.missing.length === 0) {
     const text = `✅ ${expectedMonth} 운세 이미지${mode}: 신규 업로드 0장 — ${folder}/ 에 ${expected.size}장(띠별 ${daysInMonth} + 별자리 ${daysInMonth})이 이미 모두 있음. 기존 파일 유지, 사이트 재다운로드·내용 비교는 하지 않음.`;
     await summary([text]);
-    await notify(text);
+    await notifySuccess(text);
     return;
   }
 
@@ -290,7 +299,7 @@ async function main() {
     const extraNote = after.extras.length ? ` ⚠️ 규칙 밖 파일 ${after.extras.length}개: ${after.extras.slice(0, 5).join(", ")}` : "";
     const text = `✅ ${expectedMonth} 운세 이미지${mode}: ${counts}${zeroNote}${report.length ? `, ${report.join(", ")}` : ""}${extraNote}`;
     await summary([text]);
-    await notify(text);
+    await notifySuccess(text);
   } finally {
     await browser?.close();
     await rm(tempDir, { recursive: true, force: true });
