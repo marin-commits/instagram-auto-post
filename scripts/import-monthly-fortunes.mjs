@@ -306,13 +306,36 @@ async function main() {
   }
 }
 
+// Failure alerts go to the operator by bot DM; the channel webhook is the fallback.
+async function notifyFailure(text) {
+  const token = process.env.SLACK_BOT_TOKEN;
+  const user = process.env.SLACK_DM_USER_ID;
+  if (token && user) {
+    try {
+      const response = await fetch(`${process.env.SLACK_API_URL || "https://slack.com/api"}/chat.postMessage`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ channel: user, text }),
+      });
+      const data = await response.json();
+      if (data.ok) return;
+      console.error(`Slack DM 실패: ${data.error}`);
+    } catch (dmError) {
+      console.error(`Slack DM 실패: ${dmError.message}`);
+    }
+  }
+  if (process.env.SLACK_WEBHOOK_URL) {
+    await notify(token && user ? `${text}\n(DM 발송에 실패해 채널로 보냄)` : text);
+  }
+}
+
 main().catch(async (error) => {
   console.error(error);
   const mode = DRY_RUN ? " [점검 실행]" : "";
   const text = `❌ ${expectedMonth} 운세 이미지 준비 실패${mode}: ${String(error.message).slice(0, 600)}`;
   try {
     await summary([text]);
-    if (process.env.SLACK_WEBHOOK_URL) await notify(text);
+    await notifyFailure(text);
   } catch (notifyError) {
     console.error(`Slack 실패 알림도 실패: ${notifyError.message}`);
   }
