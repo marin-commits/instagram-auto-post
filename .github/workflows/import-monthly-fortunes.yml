@@ -16,6 +16,11 @@ on:
         required: true
         type: boolean
         default: false
+      notify_test:
+        description: "Only send a test failure alert (no download, no upload)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +44,7 @@ jobs:
       # Failure alerts: bot DM to Marin (falls back to the channel webhook).
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       SLACK_DM_USER_ID: U0A1RNJ0VJL
+      NOTIFY_TEST: ${{ github.event_name == 'workflow_dispatch' && inputs.notify_test || 'false' }}
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
       VERIFY_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_existing || 'false' }}
       COMPARE_SAMPLE_DIR: comparison-samples
