@@ -36,6 +36,9 @@ jobs:
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      # Failure alerts: bot DM to Marin (falls back to the channel webhook).
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_DM_USER_ID: U0A1RNJ0VJL
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
       VERIFY_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_existing || 'false' }}
       COMPARE_SAMPLE_DIR: comparison-samples
