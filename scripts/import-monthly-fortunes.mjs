@@ -205,6 +205,12 @@ async function main() {
   for (const key of ["SUPABASE_URL", "SUPABASE_SECRET_KEY", "SLACK_WEBHOOK_URL"]) {
     if (!process.env[key]) throw new Error(`환경 변수 ${key} 없음`);
   }
+  if (process.env.NOTIFY_TEST === "true") {
+    // Manual check that failure alerts reach Slack; touches no files.
+    await notifyFailure(`🧪 [알림 테스트] 월별 운세 이미지 작업이 실패하면 이렇게 알려드립니다. 실제 실패는 아닙니다.`);
+    console.log("알림 테스트 완료");
+    return;
+  }
   const mode = DRY_RUN ? " [점검 실행·업로드 안 함]" : (SCHEDULED && today.day === "02" ? " [2일 재확인]" : "");
   const before = await listFolder();
   const initial = inspectStored(before);
@@ -318,7 +324,10 @@ async function notifyFailure(text) {
         body: JSON.stringify({ channel: user, text }),
       });
       const data = await response.json();
-      if (data.ok) return;
+      if (data.ok) {
+        console.log("Slack DM 발송 완료");
+        return;
+      }
       console.error(`Slack DM 실패: ${data.error}`);
     } catch (dmError) {
       console.error(`Slack DM 실패: ${dmError.message}`);
